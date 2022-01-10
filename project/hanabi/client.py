@@ -7,6 +7,15 @@ import socket
 from constants import *
 import os
 
+# Program constants / server constants
+# HOST = "127.0.0.1"
+# PORT =  1024 # 0x4A7AB1 could have been a better port, but networkers did not allow us to have it
+# DATASIZE = 10240
+# playerName = 'Hafez'
+
+# cd project/hanabi
+# python server.py
+# python client.py 127.0.0.1 1024 p1
 
 if len(argv) < 4:
     print("You need the player name to start the game.")
