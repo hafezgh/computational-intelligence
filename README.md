@@ -2,7 +2,11 @@
 
 The games of the simplest version of Hanabi can be found [here](https://www.spillehulen.dk/media/102616/hanabi-card-game-rules.pdf).
 
-## Server
+For a more extensive study of the game, its human conventions based on the theory of mind, and its numerous variants, see [this link](https://hanabi.github.io/).
+
+The developers of this website also have an online server for playing hanabi, see [here](https://hanab.live/), or join their discord server [here](https://discord.gg/FADvkJp).
+
+## Considerations
 
 The server accepts passing objects provided in GameData.py back and forth to the clients.
 Each object has a ```serialize()``` and a ```deserialize(data: str)``` method that must be used to pass the data between server and client.
