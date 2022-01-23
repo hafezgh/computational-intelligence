@@ -11,7 +11,7 @@ import random
 import numpy as np
 
 class HanabiAgent():
-    def __init__(self, name, verbose_action=False, verbose_full=False, num_games_limit=None, num_players=None, board_info=None, **kwargs):
+    def __init__(self, name, verbose_action=False, num_games_limit=None, num_players=None, board_info=None, **kwargs):
         self.name = name
         self.num_players = num_players
         self.info = board_info # {'players': {'pi_name': {'turn': turn, 'cards': [list of Card objs]}},
@@ -21,10 +21,10 @@ class HanabiAgent():
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.my_turn = False
         self.current_player = None
+        self.sleeptime = 0.01
         self.status = 'Lobby'
         self.policy = {} # {action: value}
         self.available_actions = []
-        self.verbose = verbose_full
         self.verbose_action = verbose_action
         ### actions: ('d', 1) --> discard cart 1, ('p', 0) --> play cart zero,
         ### ('h', 'p2', 'red') --> hint player p2 'red', ('h', 'p1', 5) --> hint player p2 number '5'
@@ -47,9 +47,8 @@ class HanabiAgent():
         self.num_games = 0
         self.average_score = 0.
         self.my_cards = [(None, None), (None, None), (None, None), (None, None), (None, None)]
-        print(self.verbose, self.verbose_action, self.num_games_limit)
 
-        while True:
+        while self.run:
             try:
                 self.s.connect((HOST, PORT))
                 break
@@ -77,75 +76,43 @@ class HanabiAgent():
                 data = GameData.GameData.deserialize(data)
             if type(data) is GameData.ServerStartGameData:
                 dataOk = True
-                if self.verbose: print("Game start!")
+                print("Tournament starts!")
                 self.s.send(GameData.ClientPlayerReadyData(self.name).serialize())
                 self.status = 'Game'
             if type(data) is GameData.ServerGameStateData:
                 dataOk = True
                 self.parse_game_data(data)
-                if self.verbose:
-                    print("Current player: " + data.currentPlayer)
-                    print("Player hands: ")
-                    for p in data.players:
-                        print(p.toClientString())
-                    print("Table cards: ")
-                    for pos in data.tableCards:
-                        print(pos + ": [ ")
-                        for c in data.tableCards[pos]:
-                            print(c.toClientString() + " ")
-                        print("]")
-                    print("Discard pile: ")
-                    for c in data.discardPile:
-                        print("\t" + c.toClientString())            
-                    print("Note tokens used: " + str(data.usedNoteTokens) + "/8")
-                    print("Storm tokens used: " + str(data.usedStormTokens) + "/3")
             if type(data) is GameData.ServerActionInvalid:
                 dataOk = True
-                if self.verbose:
-                    print("Invalid action performed. Reason:")
-                    print(data.message)
+                # print("Invalid action performed. Reason:")
+                # print(data.message)
             if type(data) is GameData.ServerActionValid:
                 dataOk = True
                 self.discard_feedback(data)
-                if self.verbose:
-                    print("Action valid!")
-                    print("Current player: " + data.player)
+
             if type(data) is GameData.ServerPlayerMoveOk:
                 dataOk = True
                 self.play_feedback(data)
-                if self.verbose:
-                    print("Nice move!")
-                    print("Current player: " + data.player)
+
             if type(data) is GameData.ServerPlayerThunderStrike:
                 dataOk = True
                 self.misplay_feedback(data)
-                if self.verbose:
-                    print("OH NO! The Gods are unhappy with you!")
+
             if type(data) is GameData.ServerHintData:
                 dataOk = True
                 self.parse_hint_data(data)
-                if self.verbose:
-                    print("Hint type: " + data.type)
-                    print("Player " + data.destination + " cards with value " + str(data.value) + " are:")
-                    for i in data.positions:
-                        print("\t" + str(i))
             if type(data) is GameData.ServerInvalidDataReceived:
                 dataOk = True
-                if self.verbose:
+                if self.verbose_action:
                     print(data.data)
             if type(data) is GameData.ServerGameOver:
-                dataOk = True
-                if self.verbose:
-                    print(data.message)
-                    print(data.score)
-                    print(data.scoreMessage)      
+                dataOk = True   
                 self.process_game_over(data.score)
                 stdout.flush()
                 #run = False
             if not dataOk:
-                if self.verbose:
+                if self.verbose_action:
                     print("Unknown or unimplemented data type: " +  str(type(data)))
-            #print("[" + playerName + " - " + self.status + "]: ", end="")
             stdout.flush()
     
     def coarse_coding_rem_clues(self):
@@ -174,10 +141,12 @@ class HanabiAgent():
         tab_cards = self.info['table_cards']
         print(f"\nThis game is over with final score {score}. "
         f"{max(self.num_deck_cards, 0)} cards remained in the deck. The final table cards: {tab_cards}. ")
+        ## reward
         if score == 0:
             reward = -20
         else:
             reward = score
+        # Updat the q-table
         next_state = (0, 0, 0, 0, 0)
         self.q_table[self.state][0] = self.q_table[self.state][0] + self.alpha*(reward\
             + self.gamma*self.q_table[next_state][np.argmax(self.q_table[next_state])] -\
@@ -202,8 +171,9 @@ class HanabiAgent():
         print("Beginning a new game...")
         ## For DEBUGGING
         #tmp = input()
-        if self.num_games > self.num_games_limit:
-            self.run = False
+        if self.num_games_limit != None:
+            if self.num_games >= self.num_games_limit:
+                self.run = False
 
 
     def misplay_feedback(self, data):
@@ -212,16 +182,19 @@ class HanabiAgent():
         if data.handLength < 5:
             self.last_round = True
         if data.lastPlayer == self.name:
+            if self.verbose_action:
+                print("Card misplayed!")
             if self.my_cards[data.cardHandIndex][0] != None or self.my_cards[data.cardHandIndex][0] != None:
                 self.my_cards_clued -= 1
             self.my_cards[data.cardHandIndex] = (None, None)
-        
+        ## reward
         reward = -10.
 
         next_state = (int(self.last_round), self.coarse_coding_rem_clues(),\
                 3-self.info['rem_mistakes'], self.coarse_coding_score(), int(self.my_cards_clued > 0))
         if next_state not in self.q_table:
             self.q_table[next_state] = [0.,0.,0.]
+        ## Updat the q-table
         self.q_table[self.state][2] = self.q_table[self.state][2] + self.alpha*(reward\
             + self.gamma*self.q_table[next_state][np.argmax(self.q_table[next_state])] -\
                     self.q_table[self.state][2])
@@ -229,9 +202,14 @@ class HanabiAgent():
 
     def play_feedback(self, data):
         self.num_deck_cards -= 1
+        #TODO (Apparantly not supported by the server!)
+        # if data.card.value == 5 and self.info['rem_clues'] < 8:
+        #     self.info['rem_clues'] += 1
         if data.handLength < 5:
             self.last_round = True
         if data.lastPlayer == self.name:
+            if self.verbose_action:
+                print("Card played successfully!")
             if self.my_cards[data.cardHandIndex][0] != None or self.my_cards[data.cardHandIndex][0] != None:
                 self.my_cards_clued -= 1
             self.my_cards[data.cardHandIndex] = (None, None)
@@ -255,6 +233,8 @@ class HanabiAgent():
             self.last_round = True
         ## Give reward and update the q-table
         if data.lastPlayer == self.name:
+            if self.verbose_action:
+                print("Card discarded!")
             if self.my_cards[data.cardHandIndex][0] != None or self.my_cards[data.cardHandIndex][0] != None:
                 self.my_cards_clued -= 1
             self.my_cards[data.cardHandIndex] = (None, None)
@@ -370,8 +350,9 @@ class HanabiAgent():
                 self.available_actions.append(action)
         if self.info['rem_clues'] != 8:
             # discard actions
-            self.available_actions.extend([('d',0), ('d', 1), ('d', 2), ('d', 3), ('d', 4)])
-    
+            if self.last_round:
+                self.available_actions.extend([('d',0), ('d', 1), ('d', 2), ('d', 3), ('d', 4)])
+                
     def is_hint_safe(self, hint):
         cards = self.info['players'][hint[1]]['cards']
         if hint[2] == 'value':
@@ -444,10 +425,7 @@ class HanabiAgent():
 
                         if self.is_hint_safe(hint_color):
                             return ('h', p_name, hint_color[3])
-                        # if self.is_hint_safe(hint_value):
-                        #     return ('h', p_name, hint_value[3])
-                        # if self.is_hint_safe(hint_color):
-                        #     return ('h', p_name, hint_color[3])
+
                 next_player_idx = (next_player_idx + 1) % self.num_players
 
         ## Last round (play the newest card if we have more than one storm tokens available)
@@ -459,14 +437,18 @@ class HanabiAgent():
         if self.info['rem_clues'] < 8:
             for i in range(len(self.my_cards)-1, -1, -1):
                 if self.my_cards[i][0] == None and self.my_cards[i][1] == None:
-                    return ('d', i)
+                    if i == 4 and self.last_round:
+                        return ('d', i-1)
+                    else:
+                        return ('d', i-1)
 
-        ### Using the q-table to choose an action as a last resort 
+        ### Using the q-table (that is being updated constantly) to choose an action as a last resort 
         a = np.argmax(self.q_table[self.state])
         if a == 1 and self.info['rem_clues'] == 0:
             a = 0
         if a == 0 and self.info['rem_clues'] == 8:
             a = 1
+
         if a == 0:
             ## dicard
             for idx, card in enumerate(self.my_cards):
@@ -541,14 +523,14 @@ class HanabiAgent():
                 ### Wait in the lobby until the game starts
                 pass
             else:
-                if init_obs:
+                if init_obs or self.info == None:
                     self.s.send(GameData.ClientGetGameStateRequest(self.name).serialize())
                     init_obs = False
                 while self.my_turn == False:
-                    time.sleep(0.1)
+                    time.sleep(self.sleeptime)
                     self.s.send(GameData.ClientGetGameStateRequest(self.name).serialize())
                 self.s.send(GameData.ClientGetGameStateRequest(self.name).serialize())
-                time.sleep(0.1)
+                #time.sleep(self.sleeptime)
                 self.my_turn = False
                 self.action = self.select_action()
                 command = self.action_to_command(self.action)
