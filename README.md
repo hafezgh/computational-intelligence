@@ -1,4 +1,4 @@
-# Hanabi - The Final Project of the Computational Intelligence Course @PoliTO
+# Hanabi - The Final Project of the Computational Intelligence Course @PoliTO - A.Y. 2021-22
 
 The games of the simplest version of Hanabi can be found [here](https://www.spillehulen.dk/media/102616/hanabi-card-game-rules.pdf).
 
