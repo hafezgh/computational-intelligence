@@ -1,6 +1,6 @@
 # Hanabi - The Final Project of the Computational Intelligence Course @PoliTO - A.Y. 2021-22
 
-The games of the simplest version of Hanabi can be found [here](https://www.spillehulen.dk/media/102616/hanabi-card-game-rules.pdf).
+The game rules of the simplest version of Hanabi can be found [here](https://www.spillehulen.dk/media/102616/hanabi-card-game-rules.pdf).
 
 For a more extensive study of the game, its human conventions based on the theory of mind, and its numerous variants, see [this link](https://hanabi.github.io/). Here, we will use the no-variant version of Hanabi with 2 to 5 players.
 
